@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cooling Tower Monitor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            font-size: 2rem;
+            color: #00d4ff;
+        }
+        .header .time {
+            color: #888;
+            margin-top: 5px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .section {
+            background: rgba(255,255,255,0.05);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .section h2 {
+            color: #00d4ff;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+        }
+        .ct-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+        }
+        .ct-box {
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+        .ct-box.active {
+            background: rgba(0, 212, 255, 0.3);
+            box-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
+        }
+        .ct-box.error {
+            background: rgba(255, 82, 82, 0.3);
+            box-shadow: 0 0 20px rgba(255, 82, 82, 0.5);
+        }
+        .ct-name {
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+        .ct-status {
+            font-size: 0.9rem;
+            color: #888;
+            margin-top: 5px;
+        }
+        .pump-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+        .pump-box {
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+        .pump-box.ok {
+            border: 2px solid #4caf50;
+        }
+        .pump-box.error {
+            border: 2px solid #ff5252;
+        }
+        .pump-name {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+        .pump-value {
+            font-size: 2rem;
+            margin: 10px 0;
+        }
+        .pump-status {
+            font-size: 0.9rem;
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+        .pump-status.ok {
+            background: #4caf50;
+        }
+        .pump-status.error {
+            background: #ff5252;
+        }
+        .system-info {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+        .info-box {
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+        }
+        .info-label {
+            color: #888;
+            font-size: 0.9rem;
+        }
+        .info-value {
+            font-size: 1.3rem;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+        .log-box {
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            padding: 15px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+        .log-entry {
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .connection-status {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+        }
+        .connection-status.connected {
+            background: #4caf50;
+        }
+        .connection-status.disconnected {
+            background: #ff5252;
+        }
+    </style>
+</head>
+<body>
+    <div class="connection-status disconnected" id="connStatus">Disconnected</div>
+    
+    <div class="container">
+        <div class="header">
+            <h1>Cooling Tower Monitor</h1>
+            <div class="time" id="currentTime">--:--:--</div>
+        </div>
+
+        <!-- CT Status -->
+        <div class="section">
+            <h2>냉각탑 상태</h2>
+            <div class="ct-grid" id="ctGrid">
+                <div class="ct-box" id="ct1"><div class="ct-name">CT1</div><div class="ct-status">대기</div></div>
+                <div class="ct-box" id="ct2"><div class="ct-name">CT2</div><div class="ct-status">대기</div></div>
+                <div class="ct-box" id="ct3"><div class="ct-name">CT3</div><div class="ct-status">대기</div></div>
+                <div class="ct-box" id="ct4"><div class="ct-name">CT4</div><div class="ct-status">대기</div></div>
+                <div class="ct-box" id="ct5"><div class="ct-name">CT5</div><div class="ct-status">대기</div></div>
+                <div class="ct-box" id="ct6"><div class="ct-name">CT6</div><div class="ct-status">대기</div></div>
+                <div class="ct-box" id="ct7"><div class="ct-name">CT7</div><div class="ct-status">대기</div></div>
+                <div class="ct-box" id="ct8"><div class="ct-name">CT8</div><div class="ct-status">대기</div></div>
+                <div class="ct-box" id="ct9"><div class="ct-name">CT9</div><div class="ct-status">대기</div></div>
+                <div class="ct-box" id="ct10"><div class="ct-name">CT10</div><div class="ct-status">대기</div></div>
+            </div>
+        </div>
+
+        <!-- Pump Status -->
+        <div class="section">
+            <h2>펌프 상태</h2>
+            <div class="pump-grid">
+                <div class="pump-box ok" id="pumpA">
+                    <div class="pump-name">펌프 A</div>
+                    <div class="pump-value" id="pumpAValue">--</div>
+                    <span class="pump-status ok" id="pumpAStatus">정상</span>
+                </div>
+                <div class="pump-box ok" id="pumpB">
+                    <div class="pump-name">펌프 B</div>
+                    <div class="pump-value" id="pumpBValue">--</div>
+                    <span class="pump-status ok" id="pumpBStatus">정상</span>
+                </div>
+                <div class="pump-box ok" id="pumpC">
+                    <div class="pump-name">펌프 C</div>
+                    <div class="pump-value" id="pumpCValue">--</div>
+                    <span class="pump-status ok" id="pumpCStatus">정상</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Info -->
+        <div class="section">
+            <h2>시스템 정보</h2>
+            <div class="system-info">
+                <div class="info-box">
+                    <div class="info-label">동작 모드</div>
+                    <div class="info-value" id="sysMode">--</div>
+                </div>
+                <div class="info-box">
+                    <div class="info-label">통신 상태</div>
+                    <div class="info-value" id="sysComm">--</div>
+                </div>
+                <div class="info-box">
+                    <div class="info-label">리셋 횟수</div>
+                    <div class="info-value" id="sysReset">--</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Logs -->
+        <div class="section">
+            <h2>동작 로그</h2>
+            <div class="log-box" id="logBox">
+                <div class="log-entry">서버 연결 대기중...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        
+        // Update time
+        setInterval(() => {
+            document.getElementById('currentTime').textContent = new Date().toLocaleTimeString('ko-KR');
+        }, 1000);
+
+        // Connection status
+        socket.on('connect', () => {
+            document.getElementById('connStatus').textContent = 'Connected';
+            document.getElementById('connStatus').className = 'connection-status connected';
+            addLog('서버 연결됨');
+        });
+
+        socket.on('disconnect', () => {
+            document.getElementById('connStatus').textContent = 'Disconnected';
+            document.getElementById('connStatus').className = 'connection-status disconnected';
+            addLog('서버 연결 끊김');
+        });
+
+        // Handle MQTT messages
+        socket.on('mqtt_message', (msg) => {
+            console.log('Received:', msg);
+            
+            if (msg.topic === 'tower/ct/status') {
+                updateCTStatus(msg.data);
+            } else if (msg.topic === 'tower/pump/status') {
+                updatePumpStatus(msg.data);
+            } else if (msg.topic === 'tower/system/status') {
+                updateSystemStatus(msg.data);
+            } else if (msg.topic === 'tower/log') {
+                addLog(msg.data);
+            }
+        });
+
+        function updateCTStatus(data) {
+            if (data.ct) {
+                for (let i = 0; i < 10; i++) {
+                    const ctBox = document.getElementById('ct' + (i + 1));
+                    const status = ctBox.querySelector('.ct-status');
+                    if (data.ct[i]) {
+                        ctBox.classList.add('active');
+                        status.textContent = '동작중';
+                    } else {
+                        ctBox.classList.remove('active');
+                        status.textContent = '대기';
+                    }
+                }
+            }
+        }
+
+        function updatePumpStatus(data) {
+            updatePump('A', data.pump_a);
+            updatePump('B', data.pump_b);
+            updatePump('C', data.pump_c);
+        }
+
+        function updatePump(name, pump) {
+            if (!pump) return;
+            const box = document.getElementById('pump' + name);
+            const value = document.getElementById('pump' + name + 'Value');
+            const status = document.getElementById('pump' + name + 'Status');
+            
+            value.textContent = pump.value;
+            
+            if (pump.status === 'ok') {
+                box.className = 'pump-box ok';
+                status.className = 'pump-status ok';
+                status.textContent = '정상';
+            } else {
+                box.className = 'pump-box error';
+                status.className = 'pump-status error';
+                status.textContent = '고장';
+            }
+        }
+
+        function updateSystemStatus(data) {
+            if (data.mode) document.getElementById('sysMode').textContent = data.mode;
+            if (data.comm) document.getElementById('sysComm').textContent = data.comm;
+            if (data.reset !== undefined) document.getElementById('sysReset').textContent = data.reset;
+        }
+
+        function addLog(message) {
+            const logBox = document.getElementById('logBox');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            const time = new Date().toLocaleTimeString('ko-KR');
+            entry.textContent = `[${time}] ${typeof message === 'object' ? JSON.stringify(message) : message}`;
+            logBox.insertBefore(entry, logBox.firstChild);
+            
+            // Keep only last 50 logs
+            while (logBox.children.length > 50) {
+                logBox.removeChild(logBox.lastChild);
+            }
+        }
+    </script>
+</body>
+</html>
